@@ -1,2 +1,9 @@
-# macos-lag
-Simulate network lag on macOS, even on localhost
+## Usage
+
+```sh
+chmod +x /usr/local/bin/lag
+```
+
+```sh
+sudo lag 0.1 100 50
+```
