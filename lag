@@ -1,0 +1,54 @@
+#!/bin/bash
+
+# Check if script is run as root
+if [ "$EUID" -ne 0 ]; then 
+    echo "Please run as root (use sudo)"
+    exit 1
+fi
+
+# Check for exactly three arguments
+if [ $# -ne 3 ]; then
+    echo "Usage: $0 <packet_loss> <base_latency_ms> <jitter_ms>"
+    echo "Example: $0 0.1 100 50"
+    exit 1
+fi
+
+plr=$1
+base=$2
+jitter=$3
+
+# Create temporary pf.conf
+cat > /tmp/lag.conf << EOF
+dummynet in proto udp from any to any pipe 1
+dummynet out proto udp from any to any pipe 1
+EOF
+
+# Enable PF with our rules
+pfctl -f /tmp/lag.conf  2>/dev/null
+pfctl -e                2>/dev/null
+
+# Cleanup function to restore network
+cleanup() {
+    pfctl -f /etc/pf.conf  2>/dev/null
+    pfctl -d               2>/dev/null
+    dnctl -q flush         2>/dev/null
+    rm -f /tmp/lag.conf
+    echo -e "\nNetwork restored."
+    exit 0
+}
+
+# Set trap for Ctrl+C
+trap cleanup SIGINT SIGTERM
+
+echo "Packet loss rate: ${plr}"
+echo "Base latency: ${base}ms"
+echo "Jitter: up to ${jitter}ms added latency"
+echo "Press Ctrl+C to stop"
+
+# Loop to simulate jitter by randomizing delay
+while true; do
+    random_jitter=$(( RANDOM % (jitter + 1) ))
+    delay=$(( base + random_jitter ))
+    sudo dnctl pipe 1 config plr $plr delay $delay
+    sleep 0.2
+done
